@@ -364,7 +364,7 @@ int isValidRegister(char *reg, int isDestReg)
  */
 void abortWithError(char *string)
 {
-    fprintf(stderr, "Error Thrown: %s\n", string);
+    fprintf(stderr, "error: %s\n", string);
     exit(1);
 }
 

@@ -6,4 +6,10 @@
 *.out
 *.out.dSYM
 
-test*
+# Test Cases
+test*.as
+test*.mc
+
+# Binary
+Assembler/assembler
+Simulator/simulator

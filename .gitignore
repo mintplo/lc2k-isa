@@ -1,4 +1,9 @@
+# VSCode
 .vscode/
+
+# Build Output and VScode Debug
 *.o
 *.out
 *.out.dSYM
+
+test*

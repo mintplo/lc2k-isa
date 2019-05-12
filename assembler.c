@@ -4,7 +4,28 @@
 
 #define MAXLINELENGTH 1000
 
+/** Global Variables */
+char *rTypeOpcodes = "add|nor";
+char *iTypeOpcodes = "lw|sw|beq";
+char *jTypeOpcodes = "jalr";
+char *oTypeOpcodes = "halt|noop";
+
+typedef struct LABEL
+{
+    char name[7];
+    char value[MAXLINELENGTH];
+    int address;
+    struct LABEL *next;
+} LABEL;
+
+LABEL labels;
+int labelCount;
+
+/** Utils Functions */
 int readAndParse(FILE *, char *, char *, char *, char *, char *);
+
+void buildLabels(FILE *readFilePtr);
+int getValueInLabels(char *);
 
 /** Error Check Functions */
 int isNumber(char *);
@@ -13,17 +34,19 @@ int isAlphabet(char *);
 int isValidLabel(char *);
 int isValidRegister(char *, int);
 
-void abort(char *string);
+int isInOpcodes(char *, char *);
+
+void abortWithError(char *string);
 
 /** Formatting Functions */
 int formatRTypeInst(char *opcode, char *reg0, char *reg1, char *destReg);
-int formatITypeInst(char *opcode, char *reg0, char *reg1, char *offset);
-int formatJTypeInst(char *opcode, char *reg0, char *reg1);
+int formatITypeInst(char *opcode, char *reg0, char *reg1, char *offset, int pc);
+int formatJTypeInst(char *reg0, char *reg1);
 int formatOTypeInst(char *opcode);
 
 int main(int argc, char *argv[])
 {
-
+    int line = 0;
     char *inFileString, *outFileString;
     FILE *inFilePtr, *outFilePtr;
     char label[MAXLINELENGTH], opcode[MAXLINELENGTH], arg0[MAXLINELENGTH], arg1[MAXLINELENGTH], arg2[MAXLINELENGTH];
@@ -54,22 +77,55 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    /* here is an example for how to use readAndParse to read a line from inFilePtr */
-    if (!readAndParse(inFilePtr, label, opcode, arg0, arg1, arg2))
+    /** Build Label Data for Assmebler */
+    buildLabels(inFilePtr);
+
+    // Assembler Main Logic
+    while (readAndParse(inFilePtr, label, opcode, arg0, arg1, arg2))
     {
-        /* reached end of file */
+        int mc = 0;
+
+        if (isInOpcodes(opcode, rTypeOpcodes))
+        {
+            mc = formatRTypeInst(opcode, arg0, arg1, arg2);
+        }
+        else if (isInOpcodes(opcode, iTypeOpcodes))
+        {
+            mc = formatITypeInst(opcode, arg0, arg1, arg2, line);
+        }
+        else if (isInOpcodes(opcode, jTypeOpcodes))
+        {
+            mc = formatJTypeInst(arg0, arg1);
+        }
+        else if (isInOpcodes(opcode, oTypeOpcodes))
+        {
+            mc = formatOTypeInst(opcode);
+        }
+        else if (!strcmp(opcode, ".fill"))
+        {
+            if (isNumber(arg0))
+            {
+                mc = atoi(arg0);
+            }
+            else
+            {
+                mc = getValueInLabels(arg0);
+            }
+        }
+        else
+        {
+            abortWithError("Do not support its opcode.");
+        }
+
+        fprintf(outFilePtr, "%d\n", mc);
+        printf("(Address %d): %d\n", line, mc);
+
+        line++;
     }
 
-    /* this is how to rewind the file ptr so that you start reading from the beginning of the file */
-    rewind(inFilePtr);
-
-    /* after doing a readAndParse, you may want to do the following to test the opcode */
-    if (!strcmp(opcode, "add"))
-    {
-        /* do whatever you need to do for opcode "add" */
-    }
-
-    return (0);
+    fclose(inFilePtr);
+    fclose(outFilePtr);
+    exit(0);
 }
 
 /**
@@ -115,6 +171,96 @@ int readAndParse(FILE *inFilePtr, char *label, char *opcode, char *arg0, char *a
      */
     sscanf(ptr, "%*[\t\n\r ]%[^\t\n\r ]%*[\t\n\r ]%[^\t\n\r ]%*[\t\n\r ]%[^\t\n\r ]%*[\t\n\r ]%[^\t\n\r ]", opcode, arg0, arg1, arg2);
     return (1);
+}
+
+/**
+ * Newly Defined Func]
+ * 
+ * Build Label Data for Assembler
+ */
+void buildLabels(FILE *readFilePtr)
+{
+    LABEL *current;
+    int line = 0;
+    char label[MAXLINELENGTH], opcode[MAXLINELENGTH], arg0[MAXLINELENGTH], arg1[MAXLINELENGTH], arg2[MAXLINELENGTH];
+
+    labelCount = 0;
+    while (readAndParse(readFilePtr, label, opcode, arg0, arg1, arg2))
+    {
+        // Early Continue;
+        if (!strcmp(label, ""))
+        {
+            line++; // next line
+            continue;
+        }
+
+        // Check If Label is valid
+        if (!isValidLabel(label))
+        {
+            abortWithError("Label is not Valid.");
+        }
+
+        // Check If Label is duplicated
+        for (current = &labels; current; current = current->next)
+        {
+            if (!strcmp(current->name, label))
+            {
+                abortWithError("Label is duplicated.");
+            }
+        }
+
+        // Move Current Pointer to End of Labels
+        for (current = &labels; current->next; current = current->next)
+            ;
+
+        current->next = malloc(sizeof(LABEL));
+        current = current->next;
+
+        strcpy(current->name, label);
+        current->address = line++;
+
+        if (!strcmp(label, ".fill"))
+        {
+            if (isNumber(arg0))
+            {
+                long temp = atol(arg0);
+                // .fill Value Overflow Check
+                if (temp > 2147483647 || temp < -2147483648)
+                {
+                    abortWithError(".fill value overflow.");
+                }
+            }
+
+            strcpy(current->value, arg0);
+        }
+        else
+        {
+            current->value[0] = '\0';
+        }
+
+        labelCount++;
+    }
+
+    rewind(readFilePtr);
+}
+
+/**
+ * Returns Label Value in Labels
+ */
+int getValueInLabels(char *name)
+{
+    LABEL *current;
+    for (current = &labels; current; current = current->next)
+    {
+        if (!strcmp(current->name, name))
+        {
+            return current->address;
+        }
+    }
+
+    abortWithError("undefined label");
+
+    return 0;
 }
 
 /**
@@ -214,12 +360,27 @@ int isValidRegister(char *reg, int isDestReg)
 /**
  * Newly Defined Func]
  * 
- * Abort with Error Print
+ * abortWithError with Error Print
  */
-void abort(char *string)
+void abortWithError(char *string)
 {
-    frpintf(stderr, "Error Thrown: %s\n", string);
+    fprintf(stderr, "Error Thrown: %s\n", string);
     exit(1);
+}
+
+/**
+ * Newly Defined Func]
+ * 
+ * Check If opcode is in opcodes Array
+ */
+int isInOpcodes(char *needle, char *opcodes)
+{
+    if (strstr(opcodes, needle) != NULL)
+    {
+        return 1;
+    }
+
+    return 0;
 }
 
 /**
@@ -242,7 +403,7 @@ int formatRTypeInst(char *opcode, char *reg0, char *reg1, char *destReg)
     // Valid Check All Reg
     if (!isValidRegister(reg0, 0) || !isValidRegister(reg1, 0) || !isValidRegister(destReg, 1))
     {
-        abort("Registers are not valid.");
+        abortWithError("Registers are not valid.");
     }
 
     // Opcode Formatting
@@ -256,7 +417,7 @@ int formatRTypeInst(char *opcode, char *reg0, char *reg1, char *destReg)
     }
     else
     {
-        abort("Wrong Opcode for R Type Inst Formatting");
+        abortWithError("Wrong Opcode for R Type Inst Formatting");
     }
 
     // Address Formatting
@@ -279,15 +440,65 @@ int formatRTypeInst(char *opcode, char *reg0, char *reg1, char *destReg)
  * bits 18-16: reg B
  * bits 15-0: offsetField (a 16-bit, 2's complement number with a range of -32768 to 32767)
  */
-int formatITypeInst(char *opcode, char *reg0, char *reg1, char *offset)
+int formatITypeInst(char *opcode, char *reg0, char *reg1, char *offset, int pc)
 {
     int mc = 0, address = 0;
 
     // Valid Check All Reg
     if (!isValidRegister(reg0, 0) || !isValidRegister(reg1, 0))
     {
-        abort("Registers are not valid.");
+        abortWithError("Registers are not valid.");
     }
+
+    // Opcode Formatting
+    if (!strcmp(opcode, "lw"))
+    {
+        mc |= (2 << 22);
+    }
+    else if (!strcmp(opcode, "sw"))
+    {
+        mc |= (3 << 22);
+    }
+    else if (!strcmp(opcode, "beq"))
+    {
+        mc |= (4 << 22);
+    }
+    else
+    {
+        abortWithError("Wrong opcode for I Type Inst Formatting");
+    }
+
+    // Address Formatting
+    mc |= (atoi(reg0) << 19);
+    mc |= (atoi(reg1) << 16);
+
+    if (isNumber(offset))
+    {
+        address = atoi(offset);
+        if (address > 32767 || address < -32768)
+        {
+            abortWithError("Offset out of boundary");
+        }
+    }
+    else
+    {
+        address = getValueInLabels(offset);
+    }
+
+    if (!strcmp(opcode, "beq") && !isNumber(offset))
+    {
+        int dest = address;
+        address = dest - pc - 1;
+        if (address > 32767 || address < -32768)
+        {
+            abortWithError("Offset out of boundary");
+        }
+    }
+
+    address &= 0xFFFF;
+    mc |= address;
+
+    return mc;
 }
 
 /**
@@ -302,14 +513,14 @@ int formatITypeInst(char *opcode, char *reg0, char *reg1, char *offset)
  * bits 18-16: reg B
  * bits 15-0: unused
  */
-int formatJTypeInst(char *opcode, char *reg0, char *reg1)
+int formatJTypeInst(char *reg0, char *reg1)
 {
     int mc = 0;
 
     // Valid Check All Reg
     if (!isValidRegister(reg0, 0) || !isValidRegister(reg1, 0))
     {
-        abort("Registers are not valid.");
+        abortWithError("Registers are not valid.");
     }
 
     // Opcode Formatting
@@ -347,7 +558,7 @@ int formatOTypeInst(char *opcode)
     }
     else
     {
-        abort("Wrong Opcode for O Type Inst Formatting");
+        abortWithError("Wrong Opcode for O Type Inst Formatting");
     }
 
     return mc;

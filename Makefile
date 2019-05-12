@@ -14,4 +14,4 @@ simulator: $(SIM_OBJS)
 		$(CC) -o $@ $(SIM_OBJS)
 
 clean :
-	rm -f $(ASSM_OBJS) $(ASSM_TARGET) $(SIM_OBJS) $(SIM_TARGET)
+	rm -f $(ASSM_OBJS) $(ASSM_TARGET) $(SIM_OBJS) $(SIM_TARGET) *.out

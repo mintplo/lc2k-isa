@@ -219,11 +219,12 @@ void buildLabels(FILE *readFilePtr)
         strcpy(current->name, label);
         current->address = line++;
 
-        if (!strcmp(label, ".fill"))
+        if (!strcmp(opcode, ".fill"))
         {
             if (isNumber(arg0))
             {
-                long temp = atol(arg0);
+                // long is 32bit, then overflow check do not fit. So, 64bit long long declare
+                long long temp = atoll(arg0);
                 // .fill Value Overflow Check
                 if (temp > 2147483647 || temp < -2147483648)
                 {

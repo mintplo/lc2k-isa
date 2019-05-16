@@ -2,7 +2,7 @@
 
 2019 HYU Computer Architecture PROJECT#1
 
-## Implementing
+## Implementation
 
 1. Assembler
 2. Simulator

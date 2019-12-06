@@ -74,3 +74,13 @@ cd Simulator
 gcc simulator.c -o simulator
 ./simualtor testcases/case1.mc > case1.txt
 ```
+
+&nbsp;
+--------
+
+The source code of *mintplo* is primarily distributed under the terms
+of the [GNU Affero General Public License v3.0] or any later version. See
+[COPYRIGHT] for details.
+
+[GNU Affero General Public License v3.0]: LICENSE
+[COPYRIGHT]: COPYRIGHT
